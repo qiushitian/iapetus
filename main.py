@@ -1,8 +1,8 @@
 """
 The single file you need to run to make all outputs.
 
-Authors: Qiushi Chris Tian
-Updated: 2026-11-11
+Authors: Qiushi Chris Tian, Audrey Whitmer
+Updated: 2026-11-10
 """
 
 from plotting import plot_disk
