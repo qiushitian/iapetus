@@ -57,9 +57,10 @@ Alternatively, you can download all code by clicking on the green/blue "< > Code
 
 ### How do I know if I have loaded the environment module successfully?
 
-If there's nothing printed on the terminal after you run `module load AMUSE/2026.6.0` (i.e. no error message), it is probably module is loaded successfully. You can check if the module is loaded by running `module list`, and you should see: 
+The module is most likely successfully loaded if your shell prints nothing after you run `module load AMUSE/2026.6.0` (i.e. no error message). You can verify this by running `module list`, and you should see: 
 ```
-AMUSE/2026.6.0
+Currently Loaded Modules:
+  1) Miniconda3/25.7.0-2   2) AMUSE/2026.6.0
 ```
 
 Alternatively, you can run `which python`, and you should see:
