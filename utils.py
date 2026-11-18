@@ -48,7 +48,8 @@ def spinner(message: str = 'Processing'):
     thread.start()
 
     try:
-        yield
+        with contextlib.redirect_stdout(io.StringIO()):
+            yield
     finally:
         stop.set()
         thread.join()

@@ -47,11 +47,11 @@ def make_system(jd: ScalarQuantity = 2457099.5 | units.day):
 
     # Get all moons for Saturn
     with spinner('Adding Iapetus'):
-        with contextlib.redirect_stdout(io.StringIO()):
-            saturn_moons = get_moons_for_planet(
-                system[system.name == 'Saturn'][0],
-                delta_JD=get_delta_jd(jd)
-            )
+        # with contextlib.redirect_stdout(io.StringIO()):
+        saturn_moons = get_moons_for_planet(
+            system[system.name == 'Saturn'][0],
+            delta_JD=get_delta_jd(jd)
+        )
     
     system.add_particle(
         saturn_moons[saturn_moons.name == b'Iapetus'][0]
