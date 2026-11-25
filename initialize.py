@@ -35,7 +35,7 @@ def make_system(jd: ScalarQuantity = 2457099.5 | units.day):
     Returns
     -------
     system : :class:`~amuse.datamodel.particles.ParticlesSubset`
-        A particle set object of the system containing the Sun, Jupiter, 
+        A particle set object of the system containing the Sun, Jupiter,
         Saturn, and Iapetus.
     """
     # Create solar system with Sun, Jupiter, and Saturn
@@ -58,7 +58,7 @@ def make_system(jd: ScalarQuantity = 2457099.5 | units.day):
             system[system.name == 'Saturn'][0],
             delta_JD=get_delta_jd(jd)
         )
-    
+
     system.add_particle(
         saturn_moons[saturn_moons.name == b'Iapetus'][0]
     )
@@ -127,7 +127,7 @@ def make_system_anki(
     return a
 
 
-def add_debris_disk(particle_set: Particles, N: int, inclination=0, seed: int = 42):
+def add_debris_disk(particle_set: Particles, N: int, inclination: float = 0.0, seed: int = 42):
     iapetus = particle_set[particle_set.name == 'iapetus'][0]
 
     #DEBRIS RING
@@ -166,6 +166,9 @@ def add_debris_disk(particle_set: Particles, N: int, inclination=0, seed: int = 
     debris_disk_particle_set.vx = iapetus.vx - v * np.sin(theta)
     debris_disk_particle_set.vy = iapetus.vy + v * np.cos(theta)
     debris_disk_particle_set.vz = iapetus.vz
+
+    # for now, initialize an inclination angle around the x-axis.
+    debris_disk_particle_set.rotate(inclination, 0.0, 0.0)
 
     # COMBINE ALL PARTICLES
     particle_set.add_particles(debris_disk_particle_set)
