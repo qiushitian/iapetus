@@ -2,7 +2,7 @@
 Initialize the AMUSE simulation.
 
 Authors: Qiushi Chris Tian
-Updated: 2026-11-12
+Updated: 2026-11-25
 """
 
 import contextlib
@@ -10,7 +10,9 @@ import io
 
 import numpy as np
 
-from amuse.community.ph4.interface import Ph4
+from amuse.community.ph4 import Ph4
+from amuse.community.fi import Fi
+from amuse.couple import bridge
 from amuse.datamodel import Particles
 from amuse.ic.solar_system_moons import get_moons_for_planet
 from amuse.units.quantities import ScalarQuantity
@@ -65,16 +67,13 @@ def make_system(jd: ScalarQuantity = 2457099.5 | units.day):
     return system
 
 
-def make_system_anki(N: int, seed: int = 42):
-    #Masses of the 3 main gravitational bodies
-    sun_mass = 1 | units.MSun
-    saturn_mass = 5.683e26 | units.kg
-    iapetus_mass = 1.81e21 | units.kg
-
-    #Approximate orbital distances. For simplicity, we start with circular orbits
-    sun_saturn_distance = 9.5 | units.au
-    saturn_iapetus_distance = 3.56e6 | units.km
-
+def make_system_anki(
+    sun_mass,
+    saturn_mass,
+    iapetus_mass,
+    sun_saturn_distance,
+    saturn_iapetus_distance
+):
     #CREATE SUN, SATURN AND IAPETUS
     a = Particles(3)
     a.name = ('sun'.casefold(), 'saturn'.casefold(), 'iapetus'.casefold())
@@ -125,11 +124,19 @@ def make_system_anki(N: int, seed: int = 42):
 
     moon.velocity = a[1].velocity + ([0, moon_speed.value_in(units.km / units.s), 0] | (units.km / units.s))
 
+    return a
+
+
+def add_debris_disk(particle_set: Particles, N: int, inclination=0, seed: int = 42):
+    iapetus = particle_set[particle_set.name == 'iapetus'][0]
+
     #DEBRIS RING
     #100 particles in circular orbits around Iapetus. The initial ring lies between 1000 and 1800 km from Iapetus's center
     #This range is approximately within the Roche-limit region discussed by Levison et al. (2011) and Dombard et al. (2012)
-    ring = Particles(N)
-    ring.name = [f'debris_{i}'.casefold() for i in range(N)]
+    debris_disk_particle_set = Particles(N)
+    debris_disk_particle_set.name = [
+        f'debris_{i}'.casefold() for i in range(N)
+    ]
 
     rng = np.random.default_rng(seed)
     r = rng.uniform(1000, 1800, N) | units.km
@@ -138,32 +145,30 @@ def make_system_anki(N: int, seed: int = 42):
     theta = rng.uniform(0, 2 * np.pi, N)
 
     #Circular orbital velocity at each radius.
-    v = (constants.G * iapetus_mass / r).sqrt()
+    v = (constants.G * iapetus.mass / r).sqrt()
 
     #Give particles very small gravitational masses. This is our numerical tracer approximation: the particles primarily respond to Iapetus's gravity instead of strongly perturbing each other.
     #These are NOT the physical masses of the debris. We will eventually assign separate represented masses for the ridge-deposition calculation.
 
-    ring.mass = (1.81e21 * 1e-12 / N) | units.kg
+    debris_disk_particle_set.mass = (1.81e21 * 1e-12 / N) | units.kg
 
     #Their physical sizes and mutual collisions are not yet included.
-    ring.radius = 0 | units.km
+    debris_disk_particle_set.radius = 0 | units.km
 
     #Place particles around Iapetus in the XY plane. All particles initially have the same z as Iapetus. We assume this plane is Iapetus's equatorial plane.
 
-    ring.x = moon.x + r * np.cos(theta)
-    ring.y = moon.y + r * np.sin(theta)
-    ring.z = moon.z
+    debris_disk_particle_set.x = iapetus.x + r * np.cos(theta)
+    debris_disk_particle_set.y = iapetus.y + r * np.sin(theta)
+    debris_disk_particle_set.z = iapetus.z
 
     # Velocity must be tangential to the circular orbit. Adding Iapetus's velocity puts the debris in the same reference frame as the other bodies.
 
-    ring.vx = moon.vx - v * np.sin(theta)
-    ring.vy = moon.vy + v * np.cos(theta)
-    ring.vz = moon.vz
+    debris_disk_particle_set.vx = iapetus.vx - v * np.sin(theta)
+    debris_disk_particle_set.vy = iapetus.vy + v * np.cos(theta)
+    debris_disk_particle_set.vz = iapetus.vz
 
     # COMBINE ALL PARTICLES
-    a.add_particles(ring)
-
-    return a
+    particle_set.add_particles(debris_disk_particle_set)
 
 
 def make_ph4(particles, conv_1=5.683e26 | units.kg, conv_2=3.56e6 | units.km):
@@ -187,3 +192,35 @@ def make_ph4(particles, conv_1=5.683e26 | units.kg, conv_2=3.56e6 | units.km):
     channels['from_gravity'] = gravity.particles.new_channel_to(particles)
 
     return gravity, channels
+
+
+def make_huayno():
+    pass
+
+
+def make_fi(particles, n_gas=500, conv_1=5.683e26 | units.kg, conv_2=3.56e6 | units.km):
+    converter = nbody_system.nbody_to_si(conv_1, conv_2)
+    gas = new_plummer_gas_model(n_gas, converter)
+    hydro = Fi(converter)
+    hydro.particles.add_particles(gas)
+    channels = {}
+    channels['to_hydro'] = gas.new_channel_to(hydro.particles)
+    channels['from_hydro'] = hydro.particles.new_channel_to(gas)
+    return hydro, channels
+
+
+def make_bridge(code_1, code_2):
+    """
+    Make a bridge between two codes.
+
+    Args:
+        code_1: The first code
+        code_2: The second code
+
+    Returns:
+        The bridge
+    """
+    my_bridge = bridge.Bridge()
+    my_bridge.add_system(code_1, (code_2))
+    my_bridge.add_system(code_2, (code_1))
+    return my_bridge

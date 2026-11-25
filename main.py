@@ -11,10 +11,15 @@ import sys
 import astropy
 import numpy as np
 import matplotlib
+
 import amuse
+from amuse.units import units
 
 from evolution import evolve_gravity
-from initialize import make_system_anki, make_ph4
+from initialize import (
+    make_system_anki, make_ph4, make_fi, make_bridge,
+    add_debris_disk
+)
 from plotting import animate
 from utils import print_cyan, print_green  # , spinner
 
@@ -43,8 +48,26 @@ if __name__ == '__main__':
     print_green('\n----- Initialization -----')
 
     # with spinner('Creating solar system'):
-    system = make_system_anki(1000)
-    gravity, channels = make_ph4(system)
+    system = make_system_anki(
+        #Masses of the 3 main gravitational bodies
+        sun_mass = 1 | units.MSun,
+        saturn_mass = 5.683e26 | units.kg,
+        iapetus_mass = 1.81e21 | units.kg,
+        #Approximate orbital distances. For simplicity, we start with circular orbits
+        sun_saturn_distance = 9.5 | units.au,
+        saturn_iapetus_distance = 3.56e6 | units.km
+    )
+    add_debris_disk(system, N=5)
+    print(system)
+    sys.exit(0)
+
+    # Create n-body and hydro 
+    gravity, gravity_channels = make_ph4(system)
+    hydro, hydro_channels = make_fi(system)
+    channels = {**gravity_channels, **hydro_channels}
+
+    # Create bridge
+    gravhydro = make_bridge(gravity, hydro)
 
     print_green('\n----- Evolving -----')
 
