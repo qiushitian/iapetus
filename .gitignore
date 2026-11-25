@@ -1,4 +1,3 @@
-# NewPORT ignore items
 **/.DS_Store
 
 # Below are adapted from the GitHub Python `.gitignore` template
