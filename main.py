@@ -13,7 +13,9 @@ import numpy as np
 import matplotlib
 import amuse
 
-from initialize import make_system
+from evolution import evolve_gravity
+from initialize import make_system_anki, make_ph4
+from plotting import animate
 from utils import print_cyan, print_green  # , spinner
 
 
@@ -26,13 +28,11 @@ if __name__ == '__main__':
     print(f'Python {sys.version}')
     print(
         f'AMUSE {amuse.__version__}, Astropy {astropy.__version__}, '
-        f'Matplotlib {matplotlib.__version__}, Numpy {np.__version__}'
+        f'Matplotlib {matplotlib.__version__}, Numpy {np.__version__}\n'
     )
 
-    print()
     print_cyan('Can the Equatorial Ridge on Iapetus Form from a Debris Disk?')
     print('  by Ankita Dasgupta, Audrey Whitmer, and Qiushi Chris Tian')
-    print()
 
     # print(
     #     "Note:\tIt's normal that the progress spinner will appear dead\n"
@@ -40,11 +40,18 @@ if __name__ == '__main__':
     # )
     # print()
 
-    print_green('----- Initialization -----')
+    print_green('\n----- Initialization -----')
 
     # with spinner('Creating solar system'):
-    system = make_system()
+    system = make_system_anki(1000)
+    gravity, channels = make_ph4(system)
 
-    print()
+    print_green('\n----- Evolving -----')
 
-    print(system)  # TODO dev, remove
+    particlesets, times = evolve_gravity(gravity, channels, particles=system)
+
+    print_green('\n----- Visualization -----')
+
+    movie_save_path = SAVE_DIR / 'disk_1k_100h.mp4'
+    animate(particlesets, times).save(movie_save_path)
+    print(f'Movie saved to {movie_save_path}')
