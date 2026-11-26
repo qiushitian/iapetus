@@ -2,7 +2,13 @@
 
 Authors: Ankita Dasgupta, Audrey Whitmer, Qiushi Chris Tian
 
-Updated: 2026-11-12
+Updated: 2026-11-26
+
+## Content & Navigation
+1. [Project Approach / Grading Rubric](#notes-on-project-approach)
+2. [How to Run Our Code](#how-to-run-our-code)
+3. [Code Content](#code-content)
+4. [FAQ](#faq)
 
 ## Notes on project approach:
 - start with sun saturn iapetus, disk

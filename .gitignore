@@ -1,7 +1,13 @@
 **/.DS_Store
 *.ipynb:Zone.Identifier
+dev/
 
-# Below are adapted from the GitHub Python `.gitignore` template
+# AMUSE ignore
+__amuse_code_output/
+
+# -------------------------------------------------------------- #
+# Below are adapted from the GitHub Python `.gitignore` template #
+# -------------------------------------------------------------- #
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

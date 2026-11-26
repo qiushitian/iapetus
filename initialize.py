@@ -1,8 +1,8 @@
 """
 Initialize the AMUSE simulation.
 
-Authors: Qiushi Chris Tian
-Updated: 2026-11-25
+Authors: Qiushi Chris Tian, Audrey Whitmer
+Updated: 2026-11-26
 """
 
 import contextlib
@@ -127,7 +127,26 @@ def make_system_anki(
     return a
 
 
-def add_debris_disk(particle_set: Particles, N: int, inclination: float = 0.0, seed: int = 42):
+def add_debris_disk(
+    particle_set: Particles,
+    N: int,
+    inclination: float = 0.0,
+    seed: int = 42
+) -> None:
+    """
+    Add a debris disk to the input particle set in-place; does not return.
+
+    Args
+    ----
+    particle_set : :class:`~amuse.datamodel.particles.Particles`
+        The particle set to add the debris disk to.
+    N : int
+        The number of particles to add to the debris disk.
+    inclination : float, optional
+        The inclination of the debris disk in radians. Default is 0.0.
+    seed : int, optional
+        The seed for the random number generator. Default is 42.
+    """
     iapetus = particle_set[particle_set.name == 'iapetus'][0]
 
     #DEBRIS RING
@@ -198,10 +217,11 @@ def make_ph4(particles, conv_1=5.683e26 | units.kg, conv_2=3.56e6 | units.km):
 
 
 def make_huayno():
-    pass
+    raise NotImplementedError
 
 
 def make_fi(particles, n_gas=500, conv_1=5.683e26 | units.kg, conv_2=3.56e6 | units.km):
+    """Deprecated since we are not using hydro anymore"""
     converter = nbody_system.nbody_to_si(conv_1, conv_2)
     gas = new_plummer_gas_model(n_gas, converter)
     hydro = Fi(converter)
