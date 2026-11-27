@@ -2,11 +2,12 @@
 The single file you need to run to make all outputs.
 
 Authors: Qiushi Chris Tian, Audrey Whitmer
-Updated: 2026-11-12
+Updated: 2026-11-27
 """
 
 from pathlib import Path
 import sys
+import time
 
 import astropy
 import numpy as np
@@ -17,11 +18,14 @@ from amuse.units import units
 
 from evolution import evolve_gravity
 from initialize import (
-    make_system_anki, make_ph4, make_fi, make_bridge,
-    add_debris_disk
+    make_bridge,
+    make_debris_disk,
+    add_particles_centered_on,
+    make_ph4,
+    make_system_anki
 )
-from plotting import animate
-from utils import print_cyan, print_green  # , spinner
+from plotting import animate_3d, get_artists_3d
+from utils import get_particle, print_cyan, print_green, spinner
 
 
 SAVE_DIR = Path('outputs/')
@@ -57,24 +61,34 @@ if __name__ == '__main__':
         sun_saturn_distance = 9.5 | units.au,
         saturn_iapetus_distance = 3.56e6 | units.km
     )
-    add_debris_disk(system, N=5)
-    print(system)
-    sys.exit(0)
+    debris_disk = make_debris_disk(10000, np.pi / 4)
+    add_particles_centered_on(system, 'iapetus', debris_disk)
 
-    # Create n-body and hydro 
-    gravity, gravity_channels = make_ph4(system)
-    hydro, hydro_channels = make_fi(system)
-    channels = {**gravity_channels, **hydro_channels}
+    # Create n-body
+    gravity, gravity_channels = make_ph4(system, n_workers=32)
+    channels = {**gravity_channels}
 
     # Create bridge
-    gravhydro = make_bridge(gravity, hydro)
+    # gravhydro = make_bridge(gravity, hydro)
 
     print_green('\n----- Evolving -----')
-
-    particlesets, times = evolve_gravity(gravity, channels, particles=system)
+    start_time = time.perf_counter()
+    with spinner():
+        particle_set_list = evolve_gravity(
+            gravity, gravity_channels,
+            particles=system, detect_collision=False,
+            duration=10 | units.yr,
+            n_frames=100
+        )
+    print(
+        f'Evolved ph4 in wall time: '
+        f'{(time.perf_counter() - start_time) / 60:.1f} min'
+    )
 
     print_green('\n----- Visualization -----')
-
-    movie_save_path = SAVE_DIR / 'disk_1k_100h.mp4'
-    animate(particlesets, times).save(movie_save_path)
-    print(f'Movie saved to {movie_save_path}')
+    movie_save_path = SAVE_DIR / '10k_10yr_45deg.mp4'
+    animate_3d(
+        particle_set_list,
+        get_particle(system, 'iapetus').radius.value_in(units.km)
+    ).save(movie_save_path)
+    print(movie_save_path)

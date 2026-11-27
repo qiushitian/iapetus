@@ -2,14 +2,11 @@
 Functions AMUSE.
 
 Authors: Qiushi Chris Tian
-Updated: 2026-11-26
+Updated: 2026-11-27
 """
 
-import time
-
-import numpy as np
-
 from amuse.units import units
+from amuse.units.quantities import ScalarQuantity
 
 
 def evolve_to(time_days, particles):
@@ -28,23 +25,31 @@ def evolve_gravity(
     gravity,
     channels,
     particles,  # TODO get rid of? Figure out how to return particles from gravity
-    duration=100 | units.hour,
-    detect_collision=False
+    duration: ScalarQuantity = 100 | units.hour,
+    n_frames: int = 100,
+    detect_collision: bool = False
 ):
-    # Record the wall-clock starting time to measure how long the calculation takes on the computer
-    start = time.perf_counter()
-
+    """
+    Evolve gravity only.
+    
+    Args:
+        gravity: gravity object
+        channels: channels object
+        particles: particles object
+        duration: duration of evolution
+        n_frames: number of frames
+        detect_collision: whether to detect collision
+    
+    Returns:
+        particle_set_list: list of particle sets at each frame
+    """
     if detect_collision:
         collision_detection = gravity.stopping_conditions.collision_detection
         collision_detection.enable()
 
-    #EVOLVE GRAVITY
-    #We ask Ph4 to evolve for one hour. However, because collision detection is enabled,Ph4 can stop BEFORE one hour if particles collide.
-    # fig, ax = plt.subplots(figsize=(5, 5))
     particle_set_list = []
-    # artists = []
     simulation_time = 0 | units.hour
-    dt = 1.0 | units.hour
+    dt = duration / n_frames
     while simulation_time < duration:
         simulation_time += dt
         gravity.evolve_model(simulation_time)
@@ -77,16 +82,5 @@ def evolve_gravity(
         # Plotting
         particle_set_list.append(particles.savepoint(simulation_time))
 
-        # art_list = animate_particles(particles)
-        # artists += art_list
-
-        # artists.append([ax_scatter(particles.x, particles.y, ax)])
-
-    #shut down the Ph4 worker
     gravity.stop()
-    print(
-        f'Evolved gravity only in wall time: '
-        f'{time.perf_counter() - start:.2f} s'
-    )
-
     return particle_set_list

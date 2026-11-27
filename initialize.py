@@ -2,7 +2,7 @@
 Initialize the AMUSE simulation.
 
 Authors: Qiushi Chris Tian, Audrey Whitmer
-Updated: 2026-11-26
+Updated: 2026-11-27
 """
 
 import contextlib
@@ -19,10 +19,15 @@ from amuse.units.quantities import ScalarQuantity
 from amuse.units import units, constants, nbody_system
 from amuse.ext.solarsystem import solar_system_in_time
 
-from utils import get_delta_jd, spinner
+from utils import (
+    casefold_and_replace_bytes,
+    get_delta_jd,
+    get_index_from_name,
+    spinner
+)
 
 
-def make_system(jd: ScalarQuantity = 2457099.5 | units.day):
+def make_system(jd: ScalarQuantity = 2457099.5 | units.day) -> Particles:
     """
     Creates a Sun–Saturn–Iapetus system with Jupiter.
 
@@ -62,21 +67,24 @@ def make_system(jd: ScalarQuantity = 2457099.5 | units.day):
     system.add_particle(
         saturn_moons[saturn_moons.name == b'Iapetus'][0]
     )
+
     system.move_to_center()
+    casefold_and_replace_bytes(system)
 
     return system
 
 
 def make_system_anki(
-    sun_mass,
-    saturn_mass,
-    iapetus_mass,
-    sun_saturn_distance,
-    saturn_iapetus_distance
-):
+    sun_mass: ScalarQuantity = 1 | units.MSun,
+    saturn_mass: ScalarQuantity = 5.683e26 | units.kg,
+    iapetus_mass: ScalarQuantity = 1.81e21 | units.kg,
+    sun_saturn_distance: ScalarQuantity = 9.5 | units.au,
+    saturn_iapetus_distance: ScalarQuantity = 3.56e6 | units.km
+) -> Particles:
+    """"""
     #CREATE SUN, SATURN AND IAPETUS
     a = Particles(3)
-    a.name = ('sun'.casefold(), 'saturn'.casefold(), 'iapetus'.casefold())
+    a.name = ('sun', 'saturn', 'iapetus')
     a.mass = (
         sun_mass.in_(units.kg),
         saturn_mass.in_(units.kg),
@@ -124,86 +132,161 @@ def make_system_anki(
 
     moon.velocity = a[1].velocity + ([0, moon_speed.value_in(units.km / units.s), 0] | (units.km / units.s))
 
+    a.move_to_center()
+    casefold_and_replace_bytes(a)
+
     return a
 
 
-def add_debris_disk(
-    particle_set: Particles,
+def make_debris_disk(
     N: int,
     inclination: float = 0.0,
+    center_mass: ScalarQuantity = 1.81e21 | units.kg,
+    total_disk_mass_ratio: float = 1e-12,
     seed: int = 42
+) -> Particles:
+    """
+    Create a debris disk with optional inclination around a central body.
+    
+    Args
+    ----
+    N : int
+        Number of particles in the debris disk.
+    inclination : float, optional, default=0.0
+        Inclination of the debris disk **in radians**. 
+    center_mass : ScalarQuantity, optional, default=1.81e21 | units.kg
+        Mass of the central body around which the debris disk is created.
+        Default is Iapetus's mass.
+    total_disk_mass_ratio : float, optional, default=1e-12
+        Ratio of the total disk mass to the central body's mass.
+    seed : int, optional, default=42
+        Seed for the random number generator.
+
+    Returns
+    -------
+    debris_disk_particle_set : :class:`~amuse.datamodel.particles.Particles`
+        Particle set containing the debris disk.
+    """
+    debris_disk_particle_set = Particles(N)
+    debris_disk_particle_set.name = [f'debris_{i}' for i in range(N)]
+
+    rng = np.random.default_rng(seed)
+
+    # The initial ring lies between 1000 and 1800 km from Iapetus's center
+    # This range is approximately within the Roche-limit region discussed by
+    # Levison et al. (2011) and Dombard et al. (2012)
+    r = rng.uniform(1000, 1800, N) | units.km
+
+    # Random orbital angle between 0 and 2*pi
+    theta = rng.uniform(0, 2 * np.pi, N)
+
+    # Circular orbital velocity at each radius
+    v = (constants.G * center_mass / r).sqrt().in_(units.kms)
+
+    # Give particles very small gravitational masses. This is our numerical
+    # tracer approximation: the particles primarily respond to Iapetus's
+    # gravity instead of strongly perturbing each other.
+    # These are NOT the physical masses of the debris. We will eventually
+    # assign separate represented masses for the ridge-deposition calculation.
+    debris_disk_particle_set.mass = (
+        center_mass * total_disk_mass_ratio / N
+    ).in_(units.kg)
+
+    # Their physical sizes are not yet included
+    debris_disk_particle_set.radius = 0 | units.km
+
+    # Place particles in the x–y plane with zero z
+    debris_disk_particle_set.x = r * np.cos(theta)
+    debris_disk_particle_set.y = r * np.sin(theta)
+    debris_disk_particle_set.z = 0 | units.km
+
+    # Break tangential orbit velocity into x and y components
+    debris_disk_particle_set.vx = - v * np.sin(theta)
+    debris_disk_particle_set.vy = v * np.cos(theta)
+    debris_disk_particle_set.vz = 0 | units.kms
+
+    # Rotate around the x-axis (for now)
+    debris_disk_particle_set.rotate(inclination, 0.0, 0.0)
+
+    debris_disk_particle_set.move_to_center()
+    casefold_and_replace_bytes(debris_disk_particle_set)
+
+    return debris_disk_particle_set
+
+
+def add_particles_centered_on(
+    added_to: Particles,
+    host_name: str,
+    addition: Particles
 ) -> None:
     """
-    Add a debris disk to the input particle set in-place; does not return.
+    Add `addition` to `added_to` centered on `host_name`.
+    Adds the particle set in-place; does not return.
 
     Args
     ----
-    particle_set : :class:`~amuse.datamodel.particles.Particles`
+    added_to : :class:`~amuse.datamodel.particles.Particles`
         The particle set to add the debris disk to.
-    N : int
-        The number of particles to add to the debris disk.
-    inclination : float, optional
-        The inclination of the debris disk in radians. Default is 0.0.
-    seed : int, optional
-        The seed for the random number generator. Default is 42.
+    addition : Particles
+        The particles to add to `added_to`.
+    host_name : str, optional
+        The name of the host to center `addition` around. Default is 'iapetus'.
     """
-    iapetus = particle_set[particle_set.name == 'iapetus'][0]
+    addition.hostname = host_name
 
-    #DEBRIS RING
-    #100 particles in circular orbits around Iapetus. The initial ring lies between 1000 and 1800 km from Iapetus's center
-    #This range is approximately within the Roche-limit region discussed by Levison et al. (2011) and Dombard et al. (2012)
-    debris_disk_particle_set = Particles(N)
-    debris_disk_particle_set.name = [
-        f'debris_{i}'.casefold() for i in range(N)
-    ]
+    host_particle = added_to[get_index_from_name(added_to, host_name)]
 
-    rng = np.random.default_rng(seed)
-    r = rng.uniform(1000, 1800, N) | units.km
+    addition.x += host_particle.x
+    addition.y += host_particle.y
+    addition.z += host_particle.z
 
-    # Random orbital angle between 0 and 2*pi. This distributes the particles around the ring.
-    theta = rng.uniform(0, 2 * np.pi, N)
+    addition.vx += host_particle.vx
+    addition.vy += host_particle.vy
+    addition.vz += host_particle.vz
 
-    #Circular orbital velocity at each radius.
-    v = (constants.G * iapetus.mass / r).sqrt()
-
-    #Give particles very small gravitational masses. This is our numerical tracer approximation: the particles primarily respond to Iapetus's gravity instead of strongly perturbing each other.
-    #These are NOT the physical masses of the debris. We will eventually assign separate represented masses for the ridge-deposition calculation.
-
-    debris_disk_particle_set.mass = (1.81e21 * 1e-12 / N) | units.kg
-
-    #Their physical sizes and mutual collisions are not yet included.
-    debris_disk_particle_set.radius = 0 | units.km
-
-    #Place particles around Iapetus in the XY plane. All particles initially have the same z as Iapetus. We assume this plane is Iapetus's equatorial plane.
-
-    debris_disk_particle_set.x = iapetus.x + r * np.cos(theta)
-    debris_disk_particle_set.y = iapetus.y + r * np.sin(theta)
-    debris_disk_particle_set.z = iapetus.z
-
-    # Velocity must be tangential to the circular orbit. Adding Iapetus's velocity puts the debris in the same reference frame as the other bodies.
-
-    debris_disk_particle_set.vx = iapetus.vx - v * np.sin(theta)
-    debris_disk_particle_set.vy = iapetus.vy + v * np.cos(theta)
-    debris_disk_particle_set.vz = iapetus.vz
-
-    # for now, initialize an inclination angle around the x-axis.
-    debris_disk_particle_set.rotate(inclination, 0.0, 0.0)
-
-    # COMBINE ALL PARTICLES
-    particle_set.add_particles(debris_disk_particle_set)
+    added_to.add_particles(addition)
+    added_to.move_to_center()
+    casefold_and_replace_bytes(added_to)
 
 
-def make_ph4(particles, conv_1=5.683e26 | units.kg, conv_2=3.56e6 | units.km):
-    # INITIALIZE PH4
-    # Convert physical SI units into the dimensionless N-body units used internally by the integrator
+def make_ph4(
+    particles: Particles,
+    # conv_1: ScalarQuantity = 5.683e26 | units.kg,
+    # conv_2: ScalarQuantity = 3.56e6 | units.km,
+    n_workers: int = 8
+) -> tuple[Ph4, dict[str, Any]]:
+    """
+    Make a Ph4 gravitational solver.
 
-    converter = nbody_system.nbody_to_si(conv_1, conv_2)
+    Args
+    ----
+    particles : :class:`~amuse.datamodel.particles.Particles`
+        The particles to add to the gravitational solver.
+    conv_1 : ScalarQuantity, optional, default=5.683e26 | units.kg
+        The first conversion factor.
+    conv_2 : ScalarQuantity, optional, default=3.56e6 | units.km
+        The second conversion factor.
+    n_workers : int, optional, default=8
+        The number of workers to use for the gravitational solver.
 
-    # start the Ph4 gravitational solver
-    gravity = Ph4(converter)
+    Returns
+    -------
+    gravity : Ph4
+        The Ph4 gravitational solver.
+    channels : dict[str, Any]
+        A dictionary containing the channels to the gravitational solver.
+    """
+    # Convert physical SI units into the dimensionless N-body units used
+    # internally by the integrator
+    converter = nbody_system.nbody_to_si(
+        particles.mass.sum(),
+        np.mean(particles.position.lengths())
+    )  # TODO conv_1, conv_2
 
-    # Accuracy/timestep control for Ph4. timestep of 0.01 is a dimensionless integrator parameter
+    gravity = Ph4(converter, number_of_workers=n_workers)
 
+    # Accuracy/timestep control for Ph4
+    # Timestep of 0.01 is a dimensionless integrator parameter
     # gravity.parameters.timestep_parameter = 0.01
 
     # copied the particles into the gravitational solver

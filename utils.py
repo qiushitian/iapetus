@@ -2,7 +2,7 @@
 Helper functions.
 
 Authors: Qiushi Chris Tian
-Updated: 2026-11-11
+Updated: 2026-11-27
 """
 
 import contextlib
@@ -12,6 +12,8 @@ import sys
 import threading
 import time
 from typing import Callable
+
+import numpy as np
 
 from amuse.units.quantities import ScalarQuantity
 from amuse.units import units, constants, nbody_system
@@ -63,6 +65,64 @@ def get_delta_jd(abs_jd: ScalarQuantity):
     return abs_jd - AMUSE_ZERO_JD
 
 
+def get_index_from_name(particles: Particles, name: str) -> int:
+    """
+    Get the index of a particle by name. The input name is casefolded. The
+    input particle set must be casefolded as well and must not contain bytes;
+    this function does not call `casefold_and_replace_bytes`.
+    
+    Parameters
+    ----------
+    particles : Particles
+        Particles to search in. Must be casefolded and must not
+        contain bytes.
+    name : str
+        Name to search for. Will be casefolded.
+    
+    Returns
+    -------
+    int
+        Index of the particle.
+    
+    Raises
+    ------
+    ValueError
+        If the particle is not found or multiple particles are found.
+    """
+    name = name.casefold()
+    where = (getattr(particles, 'name') == name).nonzero()[0]
+    if len(where) == 0:
+        raise ValueError(f"Particle with name '{name}' not found.")
+    elif len(where) > 1:
+        raise ValueError(f"Multiple particles found with name '{name}'.")
+    return where[0]
+
+
+def get_particle(particles: Particles, name: str) -> Particle:
+    """
+    Get a particle by name.
+    
+    Parameters
+    ----------
+    particles : Particles
+        Particles to search in. Must be casefolded and must not
+        contain bytes.
+    name : str
+        Name to search for. Will be casefolded.
+    
+    Returns
+    -------
+    Particle
+        The particle with the given name.
+    
+    Raises
+    ------
+    ValueError
+        If the particle is not found or multiple particles are found.
+    """
+    return particles[get_index_from_name(particles, name)]
+
+
 def get_time_jd(delta_jd: ScalarQuantity):
     """Alias for utils.get_abs_jd()."""
     return get_abs_jd(delta_jd)
@@ -74,6 +134,27 @@ def print_cyan(message, *args, **kwargs):
 
 def print_green(message, *args, **kwargs):
     print(f'\033[92m{message}\033[00m', *args, **kwargs)
+
+
+def casefold_and_replace_bytes(
+    particles: Particles,
+    attributes: list[str] = ['name', 'hostname', 'type']
+) -> None:
+    """
+    Casefold attributes and, if bytes-typed, replace with strings.
+    """
+    if not isinstance(attributes, (list, tuple, np.ndarray)):
+        attributes = [attributes]
+
+    for attr in attributes:
+        if hasattr(particles, attr):
+            if getattr(particles, attr).dtype.type == np.bytes_:
+                values = [b.decode() for b in getattr(particles, attr)]
+                delattr(particles, attr)
+                setattr(particles, attr, values)
+            if getattr(particles, attr).dtype.type == np.str_:
+                values = [s.casefold() for s in getattr(particles, attr)]
+                setattr(particles, attr, values)
 
 
 # def run_with_spinner(message: str, func: Callable, *args, **kwargs):
